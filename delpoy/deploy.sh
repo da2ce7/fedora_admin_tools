@@ -1,12 +1,12 @@
-bash -s <<'DEPLOY_EOF'
+bash -c '
 set -Ceuo pipefail  # -e: exit on error, -u: fail on undefined var
 
 # 1. Deploy hash_verified_install tool
 install -d -m0700 -o root -g root /root/.sai || exit $?
 temp_file=$(mktemp -p /root/.sai) || exit $?
-trap 'rm -f "$temp_file"' EXIT
+trap '\''rm -f "$temp_file"'\'' EXIT
 
-echo "$DEPLOY_DATA" | base64 -d | gunzip > "$temp_file" || {
+echo "$DEPLOY_DATA" | base64 -d | gunzip >| "$temp_file" || {
     echo >&2 "Decompression failed"; exit 1; }
 
 sha256sum --strict -c <<< "$DEPLOY_DATA_HASH  $temp_file" || {
@@ -30,5 +30,4 @@ fi
 echo "DONE"
 
 sleep infinity
-
-DEPLOY_EOF
+'
