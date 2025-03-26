@@ -2,7 +2,7 @@
 # hash_verified_install.sh
 # Usage: hash_verified_install <sha256_hash> <max_bytes> <url> <target_path>
 
-set -Ceo pipefail
+set -Ceuox pipefail  # -e: exit on error, -u: fail on undefined var
 
 h="$1"
 too_big="$2"

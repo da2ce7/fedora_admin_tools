@@ -1,5 +1,5 @@
 bash -c '
-set -Ceuo pipefail  # -e: exit on error, -u: fail on undefined var
+set -Ceuox pipefail  # -e: exit on error, -u: fail on undefined var
 
 # 1. Deploy hash_verified_install tool
 install -d -m0700 -o root -g root /root/.sai || exit $?
@@ -11,6 +11,8 @@ echo "$DEPLOY_DATA" | base64 -d | gunzip >| "$temp_file" || {
 
 sha256sum --strict -c <<< "$DEPLOY_DATA_HASH  $temp_file" || {
     echo >&2 "Hash validation failed"; exit 57; }
+
+echo $DEPLOY_DATA_HASH
 
 mkdir -p /root/bin && chmod 700 /root/bin
 install -m 0500 -o root -g root -T "$temp_file" /root/bin/hash_verified_install
