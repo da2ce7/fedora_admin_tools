@@ -70,10 +70,6 @@ if [[ -n "$SSH_TTY" && -t 0 && $- == *i* ]]; then
         echo >&2 "Requires Bash >=4.2"; exit 1
     fi
 
-    if ! command -v inotifywait &>/dev/null; then
-        echo >&2 "Missing inotify-tools"; exit 1
-    fi
-
     # Security validation
     [[ ! -O "$SSH_TTY" ]] && { echo >&2 "TTY ownership mismatch"; exit 1; }
 
