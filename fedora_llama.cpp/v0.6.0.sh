@@ -2,6 +2,11 @@
 # fedora_llama_cpp.sh
 set -Ceo pipefail
 
+readonly INSTALL_SCRIPT_PATH="$1"
+readonly SSH_AGENT_DATA_HASH="dfeb8aa74ec8a8d6e78dc35449559dccfdcd9f0204a5fb1e80daf0c00fb5bf91"
+readonly SSH_AGENT_SOURCE_URL="https://raw.githubusercontent.com/da2ce7/some_admin_tools/1fbb5dfeefd1a2831c8cecc4d48ef6d7f20371b7/ssh_connection_agent/v0.1.0.sh"
+readonly SSH_AGENT_INSTALL_PATH="/etc/profile.d/ssh-connection-agent.sh"
+
 # LOGIN
 mkdir -p ~/.ssh
 chmod 700 ~/.ssh
@@ -19,13 +24,9 @@ dnf install @c-development @development-tools cmake sshd screen htop rustup yarn
 npm install --global corepack
 
 # SSH_AGENT_WATCHER
-/root/bin/hash_verified_install \
-    "d974e8fc9a97ed6499c3b3ff26329c351077aa4c3e44d93f2edfd37517c0d817" \
-    "16000" \
-    "https://raw.githubusercontent.com/da2ce7/fedora_admin_tools/refs/heads/develop/agents/ssh-connection-agent.sh" \
-    "/etc/profile.d/ssh-connection-agent.sh" || exit $?
-
-chmod 0755 "/etc/profile.d/ssh-connection-agent.sh"
+"$INSTALL_SCRIPT_PATH" "$SSH_AGENT_DATA_HASH" 1 10 \
+    "$SSH_AGENT_SOURCE_URL" "$SSH_AGENT_INSTALL_PATH"
+chmod 0755 "$SSH_AGENT_INSTALL_PATH"
 
 # DEVELOP USER
 useradd -m dev
