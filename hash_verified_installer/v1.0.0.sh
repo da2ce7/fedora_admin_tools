@@ -2,7 +2,7 @@
 # hash_verified_installer.sh
 # Usage: hash_verified_installer <sha256_hash> <block_size> <max_blocks> <download_timeout> <url> <target_path>
 
-set -Ceuo pipefail
+set -Ceuox pipefail
 
 h="$1"
 block_size="$2"

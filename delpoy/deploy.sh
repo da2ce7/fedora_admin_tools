@@ -20,7 +20,9 @@ install -m 0500 -o root -g root -T "$temp_file" /root/bin/hash_verified_install
 # 2. Use deployed tool to install payload
 /root/bin/hash_verified_install \
     "$PAYLOAD_HASH" \
-    "$PAYLOAD_MAX_SIZE" \
+    1024\
+    $(( (PAYLOAD_MAX_SIZE + 1023) / 1024 ))\
+    10\
     "$PAYLOAD_URL" \
     "$PAYLOAD_INSTALL_PATH" || exit $?
 
