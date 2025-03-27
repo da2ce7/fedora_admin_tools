@@ -2,7 +2,7 @@
 # hash_verified_installer.sh
 # Usage: hash_verified_installer <sha256_hash> <max_blocks> <download_timeout> <url> <target_path>
 
-set -Ceuo pipefail
+set -Ceuox pipefail
 
 h="$1"
 max_blocks="$2"
@@ -124,12 +124,21 @@ if ! install -d -m0700 -o root -g root /root/.sai; then
   exit 6
 fi
 
+# Test without exclusivity lock
+dd if=/dev/zero of=/root/.sai/test.img bs=128K count=1 status=progress
+# Test raw partition write
+dd if=/dev/urandom of=/root/.sai/stress.img bs=1M count=100
+rm -f /root/.sai/test.img /root/.sai/stress.img
+
 # Create temporary file
 if ! temp_file=$(mktemp -p /root/.sai); then
   echo >&2 "${error_map[7]}: $temp_file"
   exit 7
 fi
 trap 'rm -f "$temp_file"' EXIT
+
+# Test url
+curl --max-time 10 --tlsv1.2 --tlsv1.3 -fsSL --proto-redir all,https "$url" | wc -c
 
 # Download with size limit
 set +e
