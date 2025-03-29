@@ -90,6 +90,7 @@ fi
 
 # Purge any existing payload
 rm -f "$target" 2>/dev/null || :
+trap 'rm -f "$target"' EXIT
 
 # Atomic write check.
 if ! dd if=/dev/null of="$target" bs=1 count=0 conv=excl,fsync 2>/dev/null; then
@@ -135,17 +136,14 @@ if ! temp_file=$(mktemp -p /root/.sai); then
   echo >&2 "${error_map[7]}: $temp_file"
   exit 7
 fi
-trap 'rm -f "$temp_file"' EXIT
-
-# Test url
-curl --max-time 10 --tlsv1.2 --tlsv1.3 -fsSL --proto-redir all,https "$url" | wc -c
+trap 'rm -f "$temp_file" "$target"' EXIT
 
 # Download with size limit
 set +e
 {
   timeout "$download_timeout" curl --retry 1024 --retry-delay 1 \
     --tlsv1.2 --tlsv1.3 -fsSL --proto-redir all,https "$url" |
-    dd bs=128K count="$max_blocks" of="$temp_file" oflag=direct conv=fsync 2>/dev/null
+    dd bs=128K count="$max_blocks" of="$temp_file" oflag=direct conv=fsync
 }
 declare -a pipe_status=("${PIPESTATUS[@]}")
 set -e
@@ -154,35 +152,45 @@ timeout_status="${pipe_status[0]}"
 dd_status="${pipe_status[1]}"
 
 if ((dd_status > 0)); then
-  rm -f "$target"
   echo >&2 "${error_map[10]}: dd(exit $dd_status)"
   exit 10 # Data write error
 
 elif ((timeout_status == 124)); then
-  rm -f "$target"
   echo >&2 "${error_map[8]}: ${download_timeout}s timeout"
   exit 8 # Timeout classification
 
 elif ((timeout_status > 0)); then
-  rm -f "$target"
   echo >&2 "${error_map[9]}: curl(exit $timeout_status)"
   exit 9 # Network failure
 fi
 
 sync "$temp_file"
 
-# Verify checksum
-if ! sha256sum --strict -c <<<"$h  $temp_file" >/dev/null 2>&1; then
-  rm -f "$target"
-  echo >&2 "${error_map[11]}: Expected $h"
+actual_checksum=$(sha256sum "$temp_file" | cut -d' ' -f1)
+if ! sha256sum --strict -c <(printf "%s  %s\n" "$h" "$temp_file") &>/dev/null; then
+  echo >&2 "${error_map[11]}: Verification Failed"$'\n'
+  echo >&2 "Actual Checksum:   ${actual_checksum}"
+  echo >&2 "Expected Checksum: ${h}"
   exit 11
+else
+  echo "Checksum: ${actual_checksum}"
 fi
+
 
 # Install final file
 if ! install -m700 -o root -g root -T "$temp_file" "$target"; then
   rm -f "$target"
   echo >&2 "${error_map[12]}: $target"
   exit 12
+fi
+
+trap 'rm -f "$temp_file"' EXIT
+
+actual_path=$(realpath -e -- "$target")
+if [[ "$actual_path" != "$canonical_path" ]]; then
+  rm -f "$canonical_path" "$actual_path"
+  echo >&2 "${error_map[5]}: Post-install path divergence"
+  exit 5
 fi
 
 exit 0

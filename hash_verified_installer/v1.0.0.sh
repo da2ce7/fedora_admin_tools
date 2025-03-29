@@ -4,11 +4,11 @@
 
 set -Ceuo pipefail
 
-h="$1"
-max_blocks="$2"
-download_timeout="$3"
-url="$4"
-target="$5"
+readonly expected_hash="$1"
+readonly max_blocks="$2"
+readonly download_timeout="$3"
+readonly url="$4"
+readonly target="$5"
 
 error_map=(
   "" # Index 0 unused
@@ -51,7 +51,7 @@ fi
 # Check system dependencies
 for cmd in curl sha256sum stat realpath mktemp install timeout; do
   if ! command -v "$cmd" >/dev/null 2>&1; then
-    echo >&2 "${error_map[1]}: $cmd"
+    echo >&2 "${error_map[1]}: '$cmd'"
     exit 1
   fi
 done
@@ -69,7 +69,7 @@ verify_path_components() {
 
     # Resolve without following terminal symlinks
     if [ -L "$full_path" ]; then
-      echo >&2 "ALERT: Symlink detected in path: $full_path"
+      echo >&2 "ALERT: Symlink detected in path: '$full_path'"
       return 5
     fi
   done
@@ -84,16 +84,17 @@ if ! verify_path_components "$target_dir"; then
 fi
 
 if ! install -d -m0700 -o root -g root "$target_dir"; then
-  echo >&2 "${error_map[6]}: $target_dir"
+  echo >&2 "${error_map[6]}: '$target_dir'"
   exit 6
 fi
 
 # Purge any existing payload
 rm -f "$target" 2>/dev/null || :
+trap 'rm -f "$target"' EXIT
 
 # Atomic write check.
 if ! dd if=/dev/null of="$target" bs=1 count=0 conv=excl,fsync 2>/dev/null; then
-  echo >&2 "${error_map[2]}: detection at $target"
+  echo >&2 "${error_map[2]}: detection at '$target'"
   exit 2
 fi
 
@@ -126,17 +127,17 @@ fi
 
 # Create temporary file
 if ! temp_file=$(mktemp -p /root/.sai); then
-  echo >&2 "${error_map[7]}: $temp_file"
+  echo >&2 "${error_map[7]}: '$temp_file'"
   exit 7
 fi
-trap 'rm -f "$temp_file"' EXIT
+trap 'rm -f "$temp_file" "$target"' EXIT
 
 # Download with size limit
 set +e
 {
-  timeout "$download_timeout" curl --retry 1024 --retry-delay 1 \
+  timeout "$download_timeout" curl --no-progress-meter --retry 1024 --retry-delay 1 \
     --tlsv1.2 --tlsv1.3 -fsSL --proto-redir all,https "$url" |
-    dd bs=128K count="$max_blocks" of="$temp_file" oflag=direct conv=fsync 2>/dev/null
+    dd bs=128K count="$max_blocks" of="$temp_file" oflag=direct conv=fsync
 }
 declare -a pipe_status=("${PIPESTATUS[@]}")
 set -e
@@ -145,35 +146,44 @@ timeout_status="${pipe_status[0]}"
 dd_status="${pipe_status[1]}"
 
 if ((dd_status > 0)); then
-  rm -f "$target"
-  echo >&2 "${error_map[10]}: dd(exit $dd_status)"
+  echo >&2 "${error_map[10]}: dd(exit '$dd_status')"
   exit 10 # Data write error
 
 elif ((timeout_status == 124)); then
-  rm -f "$target"
   echo >&2 "${error_map[8]}: ${download_timeout}s timeout"
   exit 8 # Timeout classification
 
 elif ((timeout_status > 0)); then
-  rm -f "$target"
-  echo >&2 "${error_map[9]}: curl(exit $timeout_status)"
+  echo >&2 "${error_map[9]}: curl(exit '$timeout_status')"
   exit 9 # Network failure
 fi
 
 sync "$temp_file"
 
-# Verify checksum
-if ! sha256sum --strict -c <<<"$h  $temp_file" >/dev/null 2>&1; then
-  rm -f "$target"
-  echo >&2 "${error_map[11]}: Expected $h"
+actual_checksum=$(sha256sum "$temp_file" | cut -d' ' -f1)
+if ! sha256sum --strict -c <(printf "%s  %s\n" "$expected_hash" "$temp_file") &>/dev/null; then
+  echo >&2 "${error_map[11]}: Verification Failed"$'\n'
+  echo >&2 "Actual Checksum:   '${actual_checksum}'"
+  echo >&2 "Expected Checksum: '${expected_hash}'"
   exit 11
+else
+  echo "Checksum: '${actual_checksum}'"
 fi
 
 # Install final file
 if ! install -m700 -o root -g root -T "$temp_file" "$target"; then
   rm -f "$target"
-  echo >&2 "${error_map[12]}: $target"
+  echo >&2 "${error_map[12]}: '$target'"
   exit 12
+fi
+
+trap 'rm -f "$temp_file"' EXIT
+
+actual_path=$(realpath -e -- "$target")
+if [[ "$actual_path" != "$canonical_path" ]]; then
+  rm -f "$canonical_path" "$actual_path"
+  echo >&2 "${error_map[5]}: Post-install path divergence"
+  exit 5
 fi
 
 exit 0
