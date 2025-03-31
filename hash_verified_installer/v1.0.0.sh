@@ -9,7 +9,7 @@ set -Ceuo pipefail
 
 for cmd in locale mv rm sync dd base64 curl sha256sum stat realpath mktemp install timeout; do
   if ! command -v "$cmd" >/dev/null 2>&1; then
-    echo >&2 "${error_map[2]}: '$cmd'"
+    echo >&2 "Required command missing: '$cmd'"
     exit 2
   fi
 done
@@ -32,11 +32,11 @@ readonly target="$5"
 readonly error_map=(
   "" # Index 0 unused
 
-  # Basic validation (1-2)
-  "Must run as root"         #1
-  "Required command missing" #2
+  # Basic validation (1)
+  "Must run as root" #1
 
-  # Path safety (3-4)
+  # Path safety (2-4)
+  "Path must be absolute"      #2
   "Invalid target path format" #3
   "Symlink component in path"  #4
 
@@ -54,22 +54,26 @@ readonly error_map=(
   # Secure environment (10)
   "Secure working directory failure" #10
 
-  # Temp file (11)
-  "Temporary file allocation failed" #11
+  # Lockfile (11-12)
+  "Lock file handle acquisition failed" #11
+  "Lock acquisition timeout/failure"    #12
 
-  # Data transfer (12-14)
-  "Data write error during download" #12
-  "Download timed out"               #13
-  "Network download failure"         #14
+  # Temp file (13)
+  "Temporary file allocation failed" #13
 
-  # Integrity check (15)
-  "Checksum verification failed" #15
+  # Data transfer (14-16)
+  "Data write error during download" #14
+  "Download timed out"               #15
+  "Network download failure"         #16
 
-  # Final install (16-17)
-  "File installation failed"        #16
-  "Backup directory stat failed"    #17
-  "Target directory stat different" #18
-  "Post-install path divergence"    #19
+  # Integrity check (17)
+  "Checksum verification failed" #17
+
+  # Final install (18-21)
+  "File installation failed"        #18
+  "Backup directory stat failed"    #19
+  "Target directory stat different" #20
+  "Post-install path divergence"    #21
 )
 
 if [ "$EUID" -ne 0 ]; then
@@ -77,10 +81,16 @@ if [ "$EUID" -ne 0 ]; then
   exit 1
 fi
 
+readonly target_base64=$(base64 -w0 <<<"$target")
+
+[[ "$target" != /* ]] && {
+  echo >&2 "${error_map[2]}: base64:'$target_base64'"
+  exit 2
+}
+
 readonly regex='^[_.:/a-zA-Z0-9 -]+$'
 if [[ ! "$target" =~ $regex ]]; then
-  readonly bad_target=$(base64 -w0 <<<"$target")
-  echo >&2 "${error_map[3]}: BASE64:'$bad_target'"
+  echo >&2 "${error_map[3]}: base64:'$target_base64'"
   exit 3
 fi
 
@@ -156,18 +166,44 @@ if ! install -d -m0700 -o root -g root /root/.sai; then
   exit 10
 fi
 
+readonly LOCK_ROOT="/root/.sai/locks"
+if ! install -d -m0700 -o root -g root "$LOCK_ROOT"; then
+  echo >&2 "${error_map[10]}: $LOCK_ROOT"
+  exit 10
+fi
+
+readonly target_hash=$(printf "%s" "$target" | sha256sum | cut -d' ' -f1)
+readonly per_target_lock="${LOCK_ROOT}/${target_hash}.lock"
+
+exec {lock_fd}>"$per_target_lock" || {
+  echo >&2 "${error_map[11]}: FD allocation"
+  exit 11
+}
+
+if ! flock -x -w 30 "$lock_fd"; then
+  echo >&2 "${error_map[12]}: ${per_target_lock}"
+  exit 12
+fi
+
+echo ${target} >&"$lock_fd"
+echo ${expected_hash} >&"$lock_fd"
+readonly install_id=$(cat /proc/sys/kernel/random/uuid)
+echo ${install_id} >&"$lock_fd"
+
+trap "flock -u "$lock_fd"; exec {lock_fd}>&-; rm -f '$download_temp' '$target_temp'" EXIT
+
 # Create temporary file
 if ! download_temp=$(mktemp -p /root/.sai); then
-  echo >&2 "${error_map[11]}: '$download_temp'"
-  exit 11
+  echo >&2 "${error_map[13]}: '$download_temp'"
+  exit 13
 fi
 readonly download_temp
-trap "rm -f '$download_temp' '$target_temp'" EXIT
+trap "flock -u "$lock_fd"; exec {lock_fd}>&-; rm -f '$download_temp' '$target_temp'" EXIT
 
 # Download with size limit
 set +e
 {
-  readonly install_id=$(cat /proc/sys/kernel/random/uuid | tee /dev/stderr)
+  echo ${install_id}
   timeout "$download_timeout" \
     curl -H "X-Correlation-ID: $install_id" --no-progress-meter -S \
     --retry 1024 --retry-delay 1 --tlsv1.2 --tlsv1.3 -fL \
@@ -183,50 +219,50 @@ readonly dd_status="${pipe_status[1]}"
 
 # Data write error
 if ((dd_status > 0)); then
-  echo >&2 "${error_map[12]}: dd(exit '$dd_status')"
-  exit 12
+  echo >&2 "${error_map[14]}: dd(exit '$dd_status')"
+  exit 14
 
   # Timeout classification
 elif ((timeout_status == 124)); then
-  echo >&2 "${error_map[13]}: ${download_timeout}s timeout"
-  exit 13
+  echo >&2 "${error_map[15]}: ${download_timeout}s timeout"
+  exit 15
 
 # Network failure
 elif ((timeout_status > 0)); then
-  echo >&2 "${error_map[14]}: curl(exit '$timeout_status')"
-  exit 14
+  echo >&2 "${error_map[16]}: curl(exit '$timeout_status')"
+  exit 16
 fi
 
 sync "$download_temp"
 
 readonly actual_checksum=$(sha256sum "$download_temp" | cut -d' ' -f1)
 if ! sha256sum --strict -c <(printf "%s  %s\n" "$expected_hash" "$download_temp") &>/dev/null; then
-  echo >&2 "${error_map[15]}: Verification Failed"$'\n'
+  echo >&2 "${error_map[17]}: Verification Failed"$'\n'
   echo >&2 "Actual Checksum:   '${actual_checksum}'"
   echo >&2 "Expected Checksum: '${expected_hash}'"
-  exit 15
+  exit 17
 fi
 
 # Install final file
 if ! install -m700 -o root -g root -T "$download_temp" "$target_temp"; then
   rm -f "$target_temp"
-  echo >&2 "${error_map[16]}: '$target_temp'"
-  exit 16
+  echo >&2 "${error_map[18]}: '$target_temp'"
+  exit 18
 fi
 
 readonly target_backup=$(mktemp -p "$(dirname "$target")" "$(basename "$target").backup.XXXXXXXXXX")
-trap "rm -f '$download_temp' '$target_temp' '$target_backup'" EXIT
+trap "flock -u "$lock_fd"; exec {lock_fd}>&-; rm -f '$download_temp' '$target_temp' '$target_backup'" EXIT
 
 if ! target_backup_dir_inode=$(stat -c '%i' "$(dirname "$target_backup")" 2>/dev/null); then
-  echo >&2 "${error_map[17]}: stat verification failed"
-  exit 17
+  echo >&2 "${error_map[19]}: stat verification failed"
+  exit 19
 fi
 readonly target_backup_dir_inode
 
 if [[ "$target_backup_dir_inode" != "$target_dir_inode" ]]; then
   {
-    echo >&2 "${error_map[18]}: "
-    exit 18
+    echo >&2 "${error_map[20]}: "
+    exit 20
   }
 fi
 
@@ -248,8 +284,8 @@ if [[ "$actual_path" != "$canonical_path" ]]; then
     exec {fd}>&- || exit
   fi
   rm -f "$canonical_path" "$actual_path"
-  echo >&2 "${error_map[19]}: Post-install path divergence"
-  exit 19
+  echo >&2 "${error_map[21]}: Post-install path divergence"
+  exit 21
 fi
 
 echo "install: SHA256:'${expected_hash}' to '${actual_path}'"
