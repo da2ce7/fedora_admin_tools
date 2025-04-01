@@ -2,8 +2,9 @@
 # hash_verified_installer.sh
 # Usage: hash_verified_installer <sha256_hash> <max_blocks> <download_timeout> <url> <target_path>
 # Notes:
-#        (1) Resets Target Parent Permissions to 700
-#        (2) Block Size is 128K
+#        (1) Run as Root
+#        (2) Installed file and new parent dir(s) are installed as root:root 700
+#        (3) Block Size is 128K
 
 set -Ceuo pipefail
 
@@ -33,47 +34,47 @@ readonly error_map=(
   "" # Index 0 unused
 
   # Basic validation (1)
-  "Must run as root" #1
+  "Error 1: Must run as root"
 
   # Path safety (2-4)
-  "Path must be absolute"      #2
-  "Invalid target path format" #3
-  "Symlink component in path"  #4
+  "Error 2: Path must be absolute"
+  "Error 3: Invalid target path format"
+  "Error 4: Symlink component in path"
 
   # Directory operations (5)
-  "Directory creation failed" #5
+  "Error 5: Directory creation failed"
 
   # Atomic write (6)
-  "Atomic file creation failed" #6
+  "Error 6: Atomic file creation failed"
 
   # Stat/Realpath checks (7-9)
-  "File stat check failed"           #7
-  "Canonical path resolution failed" #8
-  "Canonical path mismatch"          #9
+  "Error 7: File stat check failed"
+  "Error 8: Canonical path resolution failed"
+  "Error 9: Canonical path mismatch"
 
   # Secure environment (10)
-  "Secure working directory failure" #10
+  "Error 10: Secure working directory failure"
 
   # Lockfile (11-12)
-  "Lock file handle acquisition failed" #11
-  "Lock acquisition timeout/failure"    #12
+  "Error 11: Lock file handle acquisition failed"
+  "Error 12: Lock acquisition timeout/failure"
 
   # Temp file (13)
-  "Temporary file allocation failed" #13
+  "Error 13: Temporary file allocation failed"
 
   # Data transfer (14-16)
-  "Data write error during download" #14
-  "Download timed out"               #15
-  "Network download failure"         #16
+  "Error 14: Data write error during download"
+  "Error 15: Download timed out"
+  "Error 16: Network download failure"
 
   # Integrity check (17)
-  "Checksum verification failed" #17
+  "Error 17: Checksum verification failed"
 
   # Final install (18-21)
-  "File installation failed"        #18
-  "Backup directory stat failed"    #19
-  "Target directory stat different" #20
-  "Post-install path divergence"    #21
+  "Error 18: File installation failed"
+  "Error 19: Backup directory stat failed"
+  "Error 20: Target directory stat different"
+  "Error 21: Post-install path divergence"
 )
 
 if [ "$EUID" -ne 0 ]; then
@@ -88,9 +89,9 @@ readonly target_base64=$(base64 -w0 <<<"$target")
   exit 2
 }
 
-readonly regex='^[_.:/a-zA-Z0-9 -]+$'
-if [[ ! "$target" =~ $regex ]]; then
-  echo >&2 "${error_map[3]}: base64:'$target_base64'"
+readonly safe_path_regex='^[_.:/a-zA-Z0-9 -]+$'
+if [[ ! "$target" =~ $safe_path_regex ]]; then
+  echo >&2 "${error_map[3]}: allowed: '$safe_path_regex'; actual (base64 enc):'$target_base64'"
   exit 3
 fi
 
@@ -268,19 +269,19 @@ fi
 
 if [ -f "$target" ]; then
   exec {fd}<>"$target" || exit
-  mv -f "${target}" "${target_backup}" && sync "${target_backup}"
+  mv -Tf "${target}" "${target_backup}" && sync "${target_backup}"
   exec {fd}>&- || exit
 fi
 
 exec {fd}<>"$target_temp" || exit
-mv "${target_temp}" "${target}" && sync "${target}"
+mv -T "${target_temp}" "${target}" && sync "${target}"
 exec {fd}>&- || exit
 
 readonly actual_path=$(realpath -e -- "$target")
 if [[ "$actual_path" != "$canonical_path" ]]; then
   if [ -f "$target_backup" ]; then
     exec {fd}<>"$target_backup" || exit
-    mv -f "${target_backup}" "${target}" && sync "${target}"
+    mv -Tf "${target_backup}" "${target}" && sync "${target}"
     exec {fd}>&- || exit
   fi
   rm -f "$canonical_path" "$actual_path"
