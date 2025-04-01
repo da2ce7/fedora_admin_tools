@@ -3,7 +3,7 @@
 # Usage: hash_verified_installer <sha256_hash> <max_blocks> <download_timeout> <url> <target_path>
 # Notes:
 #        (1) Run as Root
-#        (2) Installed file and new parent dir(s) are installed as root:root 700
+#        (2) File and its immediate parent directory are set to root:root 700
 #        (3) Block Size is 128K
 
 set -Ceuo pipefail
