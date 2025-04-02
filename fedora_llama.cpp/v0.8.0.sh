@@ -4,6 +4,21 @@ set -Ceo pipefail
 
 readonly INSTALL_SCRIPT_PATH="$1"
 readonly SSH_AGENT_INSTALL_PATH="/etc/profile.d/ssh-connection-agent.sh"
+readonly ADD_GROUPS_PAM_INSTALL_PATH="/usr/local/bin/add-groups-pam.sh"
+
+
+# SSH_AGENT_WATCHER
+set -x
+"$INSTALL_SCRIPT_PATH" "$SSH_AGENT_DATA_HASH" 1 10 \
+    "$SSH_AGENT_SOURCE_URL" "$SSH_AGENT_INSTALL_PATH"
+set +x
+chmod 0755 "$SSH_AGENT_INSTALL_PATH"
+
+# ADD_GROUPS_PAM
+set -x
+"$INSTALL_SCRIPT_PATH" "$ADD_GROUPS_PAM_DATA_HASH" 1 10 \
+    "$ADD_GROUPS_PAM_SOURCE_URL" "$ADD_GROUPS_PAM_INSTALL_PATH"
+set +x
 
 # LOGIN
 mkdir -p ~/.ssh
@@ -22,15 +37,11 @@ dnf install @c-development @development-tools cmake sshd screen htop rustup yarn
 npm install --global corepack
 
 
-# SSH_AGENT_WATCHER
-set -x
-"$INSTALL_SCRIPT_PATH" "$SSH_AGENT_DATA_HASH" 1 10 \
-    "$SSH_AGENT_SOURCE_URL" "$SSH_AGENT_INSTALL_PATH"
-set +x
-chmod 0755 "$SSH_AGENT_INSTALL_PATH"
+
+
 
 # DEVELOP USER
-useradd -m dev
+useradd -m git
 
 # SERVICES
 rsyslogd
