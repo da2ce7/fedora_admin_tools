@@ -2,9 +2,10 @@
 # /etc/profile.d/ssh-connection-agent.sh
 
 set -Ceuo pipefail
-shopt -s huponexit 2>/dev/null
 
 ssh_agent_guard() {
+    shopt -s huponexit 2>/dev/null
+    
     local ssh_ppid session_id pgid
 
     # Capture critical process identifiers

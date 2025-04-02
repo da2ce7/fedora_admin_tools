@@ -1,6 +1,6 @@
 bash -c '
 #!/bin/bash
-set -euox pipefail
+set -euo pipefail
 
 # Validate environment
 req_env_vars=(
@@ -66,7 +66,7 @@ else
     exit $EXIT_CODE
 fi
 
-trap "echo 'Rcv shutdown signal'; exit 0" TERM HUP INT QUIT
+trap "echo rcv\ shutdown\ signal; exit 0" TERM HUP INT QUIT
 
 while true; do
     sleep 365d &
