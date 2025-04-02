@@ -10,7 +10,7 @@ set -eo pipefail # Exit on error
 }
 
 # Configuration
-AUTHSELECT_PROFILE="auto_groups"
+FEATURE_NAME="auto-groups"
 ADD_GROUPS_PAM_PATH="$1"
 shift
 TARGET_GROUPS=("$@") # Remaining arguments after script path
@@ -27,7 +27,7 @@ command -v authselect >/dev/null 2>&1 || {
     exit 1
 }
 
-# check if ADD_GROUPS_PAM_PATH exists
+# Check if ADD_GROUPS_PAM_PATH exists
 [[ -x "$ADD_GROUPS_PAM_PATH" ]] || {
     echo "ERROR: PAM helper script missing: $ADD_GROUPS_PAM_PATH" >&2
     exit 1
@@ -49,35 +49,28 @@ done
     exit 1
 }
 
-# Configure authselect profile
-current_base="$(authselect current --raw | awk '{print $1}')"
-current_features="$(authselect current --raw | awk '{$1=""; print $0}' | xargs)"  # Capture feature flags
+# Create authselect feature directory
+FEATURE_DIR="/etc/authselect/features/${FEATURE_NAME}"
+echo "Creating authselect feature: ${FEATURE_NAME}"
+mkdir -p "${FEATURE_DIR}"
 
-if ! authselect list | grep -q "^${AUTHSELECT_PROFILE}$"; then
-    echo "Creating authselect profile: ${AUTHSELECT_PROFILE}"
-    authselect create-profile "${AUTHSELECT_PROFILE}" --base-on "$current_base" >/dev/null || {
-        echo "ERROR: Failed to create authselect profile" >&2
-        exit 1
-    }
-fi
+# Create PAM configuration file for the feature
+cat > "${FEATURE_DIR}/system-auth.pam" <<EOF
+# Insert after pam_limits.so in session stack
+type:        session
+control:     optional
+module:      pam_exec.so
+options:     "${ADD_GROUPS_PAM_PATH} ${TARGET_GROUPS[*]}"
+insert_after: .*/pam_limits\.so
+EOF
 
-# Add PAM configuration
-pam_file="/etc/authselect/custom/${AUTHSELECT_PROFILE}/system-auth"
-insert_line="session     optional      pam_exec.so ${ADD_GROUPS_PAM_PATH} ${TARGET_GROUPS[*]}"
-
-if ! grep -qF "pam_exec.so ${ADD_GROUPS_PAM_PATH}" "$pam_file"; then
-    echo "Updating PAM configuration in ${pam_file}"
-    # Insert session line
-    sed -i "/pam_limits.so/a ${insert_line}" "$pam_file" || {
-        echo "ERROR: Failed to modify PAM config" >&2
-        exit 1
-    }
-fi
-
-# Apply authselect changes
+# Apply the feature
 echo "Applying authselect configuration"
-authselect select "${AUTHSELECT_PROFILE}" ${current_features} with-sudo --force >/dev/null || {
-    echo "ERROR: Failed to apply authselect profile" >&2
+current_profile=$(authselect current --raw | awk '{print $1}')
+current_features=$(authselect current --raw | awk '{$1=""; print $0}' | xargs)
+
+authselect select "${current_profile}" ${current_features} with-feature "${FEATURE_NAME}" with-sudo --force || {
+    echo "ERROR: Failed to apply authselect feature" >&2
     exit 1
 }
 
@@ -94,8 +87,8 @@ if ! authselect test | grep -q 'PAM syntax check: OK'; then
     exit 1
 fi
 
-# Restart critical services (no reboot needed)
+# Restart critical services
 systemctl try-reload-or-restart systemd-logind.service >/dev/null 2>&1 || true
 
-echo "Success! Configuration complete."
+echo "Success! Feature '${FEATURE_NAME}' installed."
 echo "New users will be added to groups: ${TARGET_GROUPS[*]} on first login"
