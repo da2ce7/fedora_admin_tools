@@ -3,8 +3,6 @@
 set -Ceo pipefail
 
 readonly INSTALL_SCRIPT_PATH="$1"
-readonly SSH_AGENT_DATA_HASH="dfeb8aa74ec8a8d6e78dc35449559dccfdcd9f0204a5fb1e80daf0c00fb5bf91"
-readonly SSH_AGENT_SOURCE_URL="https://raw.githubusercontent.com/da2ce7/some_admin_tools/9d5bd4200db781f50c05a0fede87ea6f557e7475/ssh_connection_agent/v0.1.0.sh"
 readonly SSH_AGENT_INSTALL_PATH="/etc/profile.d/ssh-connection-agent.sh"
 
 # LOGIN
