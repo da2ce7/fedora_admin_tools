@@ -1,13 +1,19 @@
 #!/usr/bin/env bash
 # install-auto-groups-pam.sh
-# Usage: ./install-auto-groups-pam.sh [GROUP1 GROUP2...]
+# Usage: ./install-auto-groups-pam.sh ADD_GROUPS_PAM_PATH GROUP1 [GROUP2...]
 
 set -eo pipefail # Exit on error
 
+[[ $# -lt 2 ]] && {
+    echo "ERROR: Usage: $0 ADD_GROUPS_PAM_PATH GROUP1 [GROUP2...]" >&2
+    exit 1
+}
+
 # Configuration
-ADD_GROUPS_PAM_PATH="/usr/local/bin/add-groups-pam.sh"
 AUTHSELECT_PROFILE="custom/auto_groups"
-TARGET_GROUPS=("$@")
+ADD_GROUPS_PAM_PATH="$1"
+shift
+TARGET_GROUPS=("$@") # Remaining arguments after script path
 
 # Check dependencies
 command -v authselect >/dev/null 2>&1 || {

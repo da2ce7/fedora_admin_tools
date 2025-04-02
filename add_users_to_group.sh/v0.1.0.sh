@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
-# /usr/local/bin/add-groups-pam
+# /usr/local/bin/add-groups-pam.sh
 # Automatically add users with UID ≥1000 to specified groups on first login
-# Requires: PAM configuration: session optional pam_exec.so add-groups-pam group1 group2...
+# Requires: PAM configuration: session optional pam_exec.so add-groups-pam.sh GROUP1 [GROUP2...]
 
 set -Ceuo pipefail    # Strict mode: (C) No clobbering, (e) Exit on error, (u) Unset detection, (o pipefail) Pipeline errors
 readonly MIN_UID=1000 # Minimum UID for user processing
