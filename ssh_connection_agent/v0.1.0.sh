@@ -1,8 +1,6 @@
 #!/usr/bin/env bash
 # /etc/profile.d/ssh-connection-agent.sh
 
-set -Ceuo pipefail
-
 ssh_agent_guard() {
     shopt -s huponexit 2>/dev/null
 
@@ -77,6 +75,8 @@ if [[ -n "$SSH_TTY" && -t 0 && $- == *i* ]]; then
         echo >&2 "Agent confinement disabled for root"
 
     else
+        set -Ceuo pipefail
+
         # Dependency checks
         if ((${BASH_VERSINFO[0]} < 4 || (${BASH_VERSINFO[0]} == 4 && ${BASH_VERSINFO[1]} < 2))); then
             echo >&2 "Requires Bash >=4.2"
