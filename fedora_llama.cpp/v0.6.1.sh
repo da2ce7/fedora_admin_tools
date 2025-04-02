@@ -21,9 +21,12 @@ dnf install vim-default-editor -y --allowerasing --assumeyes --quiet >/dev/null
 dnf install @c-development @development-tools cmake sshd screen htop rustup yarnpkg openssl-devel inotify-tools crontabs rsyslog --assumeyes --quiet >/dev/null
 npm install --global corepack
 
+
 # SSH_AGENT_WATCHER
+set +x
 "$INSTALL_SCRIPT_PATH" "$SSH_AGENT_DATA_HASH" 1 10 \
     "$SSH_AGENT_SOURCE_URL" "$SSH_AGENT_INSTALL_PATH"
+set -x
 chmod 0755 "$SSH_AGENT_INSTALL_PATH"
 
 # DEVELOP USER
