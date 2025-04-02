@@ -48,7 +48,7 @@ xzcat -d "$comp_inst_tempfile" | install -C -m500 -o root -g root /dev/stdin \
 sha256sum "$INST_SCRIPT_PATH"
 
 "$INST_SCRIPT_PATH" "$PAYLOAD_HASH" 1 10 \
-    "$PAYLOAD_SOURCE_URL" PAYLOAD_INSTALL_PATH
+    "$PAYLOAD_SOURCE_URL" "$PAYLOAD_INSTALL_PATH"
 [[ -x "$PAYLOAD_INSTALL_PATH" ]] || {
     echo >&2 "Payload validation failed"
     exit 106
