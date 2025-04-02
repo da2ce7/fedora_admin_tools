@@ -4,7 +4,8 @@ set -Ceo pipefail
 
 readonly INSTALL_SCRIPT_PATH="$1"
 readonly SSH_AGENT_INSTALL_PATH="/etc/profile.d/ssh-connection-agent.sh"
-readonly ADD_GROUPS_PAM_INSTALL_PATH="/usr/local/bin/add-groups-pam.sh"
+readonly ADD_GROUPS_PAM_INSTALL_PATH="/root/bin/add-groups-pam.sh"
+readonly INSTALL_ADD_GROUPS_PAM_INSTALL_PATH="/root/bin/add-groups-pam.sh"
 
 
 # SSH_AGENT_WATCHER
@@ -18,6 +19,12 @@ chmod 0755 "$SSH_AGENT_INSTALL_PATH"
 set -x
 "$INSTALL_SCRIPT_PATH" "$ADD_GROUPS_PAM_DATA_HASH" 1 10 \
     "$ADD_GROUPS_PAM_SOURCE_URL" "$ADD_GROUPS_PAM_INSTALL_PATH"
+set +x
+
+# ADD_GROUPS_PAM
+set -x
+"$INSTALL_SCRIPT_PATH" "$INSTALL_ADD_GROUPS_PAM_DATA_HASH" 1 10 \
+    "$INSTALL_ADD_GROUPS_PAM_SOURCE_URL" "$INSTALL_ADD_GROUPS_PAM_INSTALL_PATH"
 set +x
 
 # LOGIN

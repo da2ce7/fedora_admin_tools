@@ -6,16 +6,12 @@ set -euo pipefail
 req_env_vars=(
     INST_BASE64 INST_COMP_HASH
     PAYLOAD_HASH PAYLOAD_SOURCE_URL
-    PAYLOAD_INSTALL_PATH PAYLOAD_MAX_BLOCKS
 )
 for var in "${req_env_vars[@]}"; do : "${!var:?Missing $var}"; done
-[[ "$PAYLOAD_MAX_BLOCKS" =~ ^[0-9]+$ ]] || {
-    echo >&2 "Invalid PAYLOAD_MAX_BLOCKS"
-    exit 101
-}
 
 readonly WORKDIR="/root/.sai" BIN_DIR="/root/bin"
 readonly INST_SCRIPT_PATH="$BIN_DIR/verified_installer"
+readonly PAYLOAD_INSTALL_PATH="$BIN_DIR/payload"
 install -d -m0700 -o root -g root "$WORKDIR" "$BIN_DIR" || exit $?
 
 comp_inst_tempfile=$(mktemp -p "$WORKDIR") || exit $?
@@ -51,8 +47,8 @@ xzcat -d "$comp_inst_tempfile" | install -C -m500 -o root -g root /dev/stdin \
 
 sha256sum "$INST_SCRIPT_PATH"
 
-"$INST_SCRIPT_PATH" "$PAYLOAD_HASH" "$PAYLOAD_MAX_BLOCKS" 10 \
-    "$PAYLOAD_SOURCE_URL" "$PAYLOAD_INSTALL_PATH"
+"$INST_SCRIPT_PATH" "$PAYLOAD_HASH" 1 10 \
+    "$PAYLOAD_SOURCE_URL" PAYLOAD_INSTALL_PATH
 [[ -x "$PAYLOAD_INSTALL_PATH" ]] || {
     echo >&2 "Payload validation failed"
     exit 106
