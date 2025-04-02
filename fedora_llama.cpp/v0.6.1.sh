@@ -23,10 +23,10 @@ npm install --global corepack
 
 
 # SSH_AGENT_WATCHER
-set +x
+set -x
 "$INSTALL_SCRIPT_PATH" "$SSH_AGENT_DATA_HASH" 1 10 \
     "$SSH_AGENT_SOURCE_URL" "$SSH_AGENT_INSTALL_PATH"
-set -x
+set +x
 chmod 0755 "$SSH_AGENT_INSTALL_PATH"
 
 # DEVELOP USER
