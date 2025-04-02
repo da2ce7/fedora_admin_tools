@@ -24,7 +24,7 @@ readonly error_map=(
   ""
   ""
   ""
-  
+
   # Path safety (10-12)
   "Error 10: Path must be absolute"
   "Error 11: Invalid target path format"
@@ -227,7 +227,7 @@ set +e
     curl -H "X-Correlation-ID: $install_id" --no-progress-meter -S \
     --retry 1024 --retry-delay 1 --tlsv1.2 --tlsv1.3 -fL \
     --proto-redir all,https "$url" |
-    dd bs=128K count="$max_blocks" of="$download_temp" oflag=direct conv=fsync
+    dd bs=128K count="$max_blocks" of="$download_temp" iflag=fullblock oflag=direct conv=fsync
 }
 pipe_status=("${PIPESTATUS[@]}")
 readonly -a pipe_status
