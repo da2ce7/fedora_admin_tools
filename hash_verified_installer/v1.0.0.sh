@@ -123,31 +123,32 @@ if ! verify_path_components "$target_dir"; then
   exit 4
 fi
 
+# install -d with -m/-o/-g applies changes only to target directory (and path ancestors if created)
 if ! install -d -m0700 -o root -g root "$target_dir"; then
   echo >&2 "${error_map[5]}: '$target_dir'"
   exit 5
 fi
 
-readonly target_temp=$(mktemp -p "$(dirname "$target")" "$(basename "$target").temp.XXXXXXXXXX")
+readonly target_temp=$(mktemp -u -p "$(dirname "$target")" "$(basename "$target").temp.XXXXXXXXXX")
 trap "rm -f '$target_temp'" EXIT
 
-# Atomic write check.
-if ! dd if=/dev/null of="$target_temp" bs=1 count=0 conv=excl,fsync 2>/dev/null; then
-  echo >&2 "${error_map[6]}: detection at '$target_temp'"
+# Create temporary target
+if ! dd if=/dev/null of="$target_temp" bs=1 count=0 conv=excl,fsync 1>&2; then
+  echo >&2 "${error_map[6]}: Failed to create '$target_temp' atomically"
   exit 6
 fi
 
 # Path Validation Part 1: Check inode retrieval
-if ! target_dir_inode=$(stat -c '%i' "$(dirname "$target_temp")" 2>/dev/null) &&
-  target_temp_inode=$(stat -c '%i' "$target_temp" 2>/dev/null); then
+if ! target_temp_dir_inode=$(stat -c '%i' "$(dirname "$target_temp")" 1>&2) &&
+  target_temp_inode=$(stat -c '%i' "$target_temp" 1>&2); then
   rm -f "$target_temp"
   echo >&2 "${error_map[7]}: stat verification failed"
   exit 7
 fi
-readonly target_dir_inode target_temp_inode
+readonly target_temp_dir_inode target_temp_inode
 
 # Path Validation Part 2: Resolve canonical path
-if ! canonical_path=$(realpath -e -- "$target_temp" 2>/dev/null); then
+if ! canonical_path=$(realpath -e -- "$target_temp"); then
   rm -f "$target_temp"
   echo >&2 "${error_map[8]}: realpath verification failed"
   exit 8
@@ -176,7 +177,7 @@ fi
 readonly target_hash=$(printf "%s" "$target" | sha256sum | cut -d' ' -f1)
 readonly per_target_lock="${LOCK_ROOT}/${target_hash}.lock"
 
-exec {lock_fd}>"$per_target_lock" || {
+exec {lock_fd}>|"$per_target_lock" || {
   echo >&2 "${error_map[11]}: FD allocation"
   exit 11
 }
@@ -191,7 +192,7 @@ echo ${expected_hash} >&"$lock_fd"
 readonly install_id=$(cat /proc/sys/kernel/random/uuid)
 echo ${install_id} >&"$lock_fd"
 
-trap "flock -u "$lock_fd"; exec {lock_fd}>&-; rm -f '$download_temp' '$target_temp'" EXIT
+trap "flock -u "$lock_fd"; exec {lock_fd}>&-; rm -f '$target_temp'" EXIT
 
 # Create temporary file
 if ! download_temp=$(mktemp -p /root/.sai); then
@@ -251,25 +252,27 @@ if ! install -m700 -o root -g root -T "$download_temp" "$target_temp"; then
   exit 18
 fi
 
-readonly target_backup=$(mktemp -p "$(dirname "$target")" "$(basename "$target").backup.XXXXXXXXXX")
+readonly target_backup=$(mktemp -u -p "$(dirname "$target")" "$(basename "$target").backup.XXXXXXXXXX")
 trap "flock -u "$lock_fd"; exec {lock_fd}>&-; rm -f '$download_temp' '$target_temp' '$target_backup'" EXIT
 
-if ! target_backup_dir_inode=$(stat -c '%i' "$(dirname "$target_backup")" 2>/dev/null); then
+if ! target_dir_inode=$(stat -c '%i' "$(dirname "$target")" 1>&2); then
   echo >&2 "${error_map[19]}: stat verification failed"
   exit 19
 fi
-readonly target_backup_dir_inode
+readonly target_dir_inode
 
-if [[ "$target_backup_dir_inode" != "$target_dir_inode" ]]; then
+if [[ "$target_dir_inode" != "$target_temp_dir_inode" ]]; then
   {
     echo >&2 "${error_map[20]}: "
     exit 20
   }
 fi
 
+readonly install_target = 
+
 if [ -f "$target" ]; then
   exec {fd}<>"$target" || exit
-  mv -Tf "${target}" "${target_backup}" && sync "${target_backup}"
+  mv -T "${target}" "${target_backup}" && sync "${target_backup}"
   exec {fd}>&- || exit
 fi
 
@@ -277,14 +280,14 @@ exec {fd}<>"$target_temp" || exit
 mv -T "${target_temp}" "${target}" && sync "${target}"
 exec {fd}>&- || exit
 
-readonly actual_path=$(realpath -e -- "$target")
-if [[ "$actual_path" != "$canonical_path" ]]; then
+readonly target_real_path=$(realpath -e -- "$target")
+if [[ "$target" != "$target_real_path" ]]; then
   if [ -f "$target_backup" ]; then
     exec {fd}<>"$target_backup" || exit
     mv -Tf "${target_backup}" "${target}" && sync "${target}"
     exec {fd}>&- || exit
   fi
-  rm -f "$canonical_path" "$actual_path"
+  rm -f "$target_real_path" "$target"
   echo >&2 "${error_map[21]}: Post-install path divergence"
   exit 21
 fi
