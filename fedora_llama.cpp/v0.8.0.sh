@@ -5,7 +5,7 @@ set -Ceo pipefail
 readonly INSTALL_SCRIPT_PATH="$1"
 readonly SSH_AGENT_INSTALL_PATH="/etc/profile.d/ssh-connection-agent.sh"
 readonly ADD_GROUPS_PAM_INSTALL_PATH="/root/bin/add-groups-pam.sh"
-readonly INSTALL_ADD_GROUPS_PAM_INSTALL_PATH="/root/bin/add-groups-pam.sh"
+readonly INSTALL_ADD_GROUPS_PAM_INSTALL_PATH="/root/bin/install-add-groups-pam.sh"
 
 
 # SSH_AGENT_WATCHER
